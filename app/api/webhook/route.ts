@@ -11,10 +11,14 @@ const client = new line.messagingApi.MessagingApiClient(config);
 
 // Webhookイベントの処理
 async function handleEvent(event: line.WebhookEvent): Promise<void> {
+  console.log('Handling event:', event.type);
+
   // メッセージイベントの場合
   if (event.type === 'message' && event.message.type === 'text') {
     const { replyToken } = event;
     const { text } = event.message;
+
+    console.log('Text message received:', text);
 
     // オウム返しの例
     const echo: line.TextMessage = {
@@ -23,30 +27,42 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
     };
 
     try {
+      console.log('Sending reply...');
       await client.replyMessage({
         replyToken,
         messages: [echo],
       });
+      console.log('Reply sent successfully');
     } catch (err) {
       console.error('Error replying to message:', err);
+      if (err instanceof Error) {
+        console.error('Error details:', err.message);
+      }
     }
   }
 
   // フォローイベントの場合
   if (event.type === 'follow') {
     const { replyToken } = event;
+    console.log('Follow event received');
+
     const welcomeMessage: line.TextMessage = {
       type: 'text',
       text: 'フォローありがとうございます！健康ナビへようこそ。',
     };
 
     try {
+      console.log('Sending welcome message...');
       await client.replyMessage({
         replyToken,
         messages: [welcomeMessage],
       });
+      console.log('Welcome message sent successfully');
     } catch (err) {
       console.error('Error replying to follow event:', err);
+      if (err instanceof Error) {
+        console.error('Error details:', err.message);
+      }
     }
   }
 }
@@ -54,10 +70,18 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
 // POST: Webhook受信エンドポイント
 export async function POST(req: NextRequest) {
   try {
+    console.log('Webhook received');
     const body = await req.text();
     const signature = req.headers.get('x-line-signature');
 
+    console.log('Environment check:', {
+      hasAccessToken: !!process.env.LINE_CHANNEL_ACCESS_TOKEN,
+      hasSecret: !!process.env.LINE_CHANNEL_SECRET,
+      hasSignature: !!signature,
+    });
+
     if (!signature) {
+      console.error('No signature provided');
       return NextResponse.json(
         { error: 'No signature' },
         { status: 400 }
@@ -66,6 +90,7 @@ export async function POST(req: NextRequest) {
 
     // 署名の検証
     if (!line.validateSignature(body, config.channelSecret || '', signature)) {
+      console.error('Invalid signature');
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
@@ -73,10 +98,13 @@ export async function POST(req: NextRequest) {
     }
 
     const events: line.WebhookEvent[] = JSON.parse(body).events;
+    console.log('Events received:', events.length, 'event(s)');
+    console.log('Event types:', events.map(e => e.type));
 
     // 各イベントを処理
     await Promise.all(events.map(handleEvent));
 
+    console.log('Events processed successfully');
     return NextResponse.json({ message: 'ok' });
   } catch (err) {
     console.error('Webhook error:', err);
