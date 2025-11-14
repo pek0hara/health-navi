@@ -20,17 +20,45 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
 
     console.log('Text message received:', text);
 
-    // オウム返しの例
-    const echo: line.TextMessage = {
+    // Quick Replyで3択の選択肢を提供
+    const replyMessage: line.TextMessage = {
       type: 'text',
-      text: `受信しました: ${text}`,
+      text: '健康活動を選択してください',
+      quickReply: {
+        items: [
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '散歩',
+              text: '散歩',
+            },
+          },
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '筋トレ',
+              text: '筋トレ',
+            },
+          },
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '瞑想',
+              text: '瞑想',
+            },
+          },
+        ],
+      },
     };
 
     try {
-      console.log('Sending reply...');
+      console.log('Sending reply with quick reply options...');
       await client.replyMessage({
         replyToken,
-        messages: [echo],
+        messages: [replyMessage],
       });
       console.log('Reply sent successfully');
     } catch (err) {
