@@ -89,12 +89,16 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         // データベースに保存
         await setUserHabits(user.id, habitNames);
 
+        // 現在の日付を取得（MM/DD形式）
+        const currentDate = new Date();
+        const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+
         const quickReplyItems: line.QuickReplyItem[] = habitNames.map((habit) => ({
           type: 'action',
           action: {
             type: 'message',
-            label: habit,
-            text: habit,
+            label: `${datePrefix} ${habit}`,
+            text: `${datePrefix} ${habit}`,
           },
         }));
 
@@ -115,12 +119,16 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         // 現在の習慣を確認
         const todayLogs = await getTodayHabitLogs(user.id);
 
+        // 現在の日付を取得（MM/DD形式）
+        const currentDate = new Date();
+        const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+
         const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
           type: 'action',
           action: {
             type: 'message',
-            label: habit,
-            text: habit,
+            label: `${datePrefix} ${habit}`,
+            text: `${datePrefix} ${habit}`,
           },
         }));
 
@@ -203,23 +211,31 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       }
 
       // 通常のメッセージへの応答（習慣を記録）
+      // 日付プレフィックスを削除して習慣名を抽出（例: "11/19 散歩" -> "散歩"）
+      const datePattern = /^\d{1,2}\/\d{1,2}\s+/;
+      const habitName = text.replace(datePattern, '');
+
       // 習慣名として認識されるか確認
-      const isHabit = habits.includes(text);
+      const isHabit = habits.includes(habitName);
 
       if (isHabit) {
-        // 習慣をDBに記録
-        await logHabit(user.id, text);
+        // 習慣をDBに記録（日付なしの習慣名のみ）
+        await logHabit(user.id, habitName);
       }
 
       // 今日の記録を取得
       const todayLogs = await getTodayHabitLogs(user.id);
 
+      // 現在の日付を取得（MM/DD形式）
+      const currentDate = new Date();
+      const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+
       const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
         type: 'action',
         action: {
           type: 'message',
-          label: habit,
-          text: habit,
+          label: `${datePrefix} ${habit}`,
+          text: `${datePrefix} ${habit}`,
         },
       }));
 
@@ -258,7 +274,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
 
       const todayCount = todayLogs.length;
       const message = isHabit
-        ? `✓ 「${text}」を記録しました！\n\n📅 ${dateStr} ${timeStr}\n🎯 今日の記録: ${todayCount}件\n\n次の活動を選択してください。`
+        ? `✓ 「${habitName}」を記録しました！\n\n📅 ${dateStr} ${timeStr}\n🎯 今日の記録: ${todayCount}件\n\n次の活動を選択してください。`
         : `「${text}」を受信しました。\n\n📅 ${dateStr} ${timeStr}\n\n習慣を選択してください。`;
 
       await client.replyMessage({
@@ -309,6 +325,10 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       // デフォルトの習慣を設定
       await setUserHabits(user.id, DEFAULT_HABITS);
 
+      // 現在の日付を取得（MM/DD形式）
+      const currentDate = new Date();
+      const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+
       const welcomeMessage: line.TextMessage = {
         type: 'text',
         text: 'フォローありがとうございます！健康ナビへようこそ。\n\nデフォルトの健康習慣を設定しました：\n1. 散歩\n2. 筋トレ\n3. 瞑想\n\n変更する場合は「/設定 習慣1,習慣2,習慣3」と入力してください。',
@@ -318,24 +338,24 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
               type: 'action',
               action: {
                 type: 'message',
-                label: '散歩',
-                text: '散歩',
+                label: `${datePrefix} 散歩`,
+                text: `${datePrefix} 散歩`,
               },
             },
             {
               type: 'action',
               action: {
                 type: 'message',
-                label: '筋トレ',
-                text: '筋トレ',
+                label: `${datePrefix} 筋トレ`,
+                text: `${datePrefix} 筋トレ`,
               },
             },
             {
               type: 'action',
               action: {
                 type: 'message',
-                label: '瞑想',
-                text: '瞑想',
+                label: `${datePrefix} 瞑想`,
+                text: `${datePrefix} 瞑想`,
               },
             },
             {
