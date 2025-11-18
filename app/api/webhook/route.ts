@@ -53,7 +53,17 @@ async function setHealthHabits(userId: string, habits: string[]) {
 }
 
 // ユーザーの健康習慣を取得
-async function getUserHabits(userId: string) {
+type HealthHabit = {
+  id: string;
+  userId: string;
+  name: string;
+  order: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+async function getUserHabits(userId: string): Promise<HealthHabit[]> {
   return await prisma.healthHabit.findMany({
     where: { userId, isActive: true },
     orderBy: { order: 'asc' },
