@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as line from '@line/bot-sdk';
-import { getOrCreateUser, getUserHabits, setUserHabits, initDatabase } from '@/lib/db';
+import {
+  getOrCreateUser,
+  getUserHabits,
+  setUserHabits,
+  initDatabase,
+  logHabit,
+  getTodayHabitLogs,
+  getHabitStats,
+} from '@/lib/db';
 
 // LINE Messaging APIの設定
 const config: line.ClientConfig = {
@@ -105,6 +113,8 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
 
       if (text === '/習慣' || text === '/確認') {
         // 現在の習慣を確認
+        const todayLogs = await getTodayHabitLogs(user.id);
+
         const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
           type: 'action',
           action: {
@@ -124,11 +134,32 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
           },
         });
 
+        // 統計情報も追加
+        quickReplyItems.push({
+          type: 'action',
+          action: {
+            type: 'message',
+            label: '統計を見る',
+            text: '/統計',
+          },
+        });
+
+        const todayLogText = todayLogs.length > 0
+          ? `\n\n【今日の記録】\n${todayLogs.map(log => {
+              const time = new Date(log.logged_at).toLocaleTimeString('ja-JP', {
+                timeZone: 'Asia/Tokyo',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              return `✓ ${log.habit_name} (${time})`;
+            }).join('\n')}`
+          : '\n\n今日はまだ記録がありません。';
+
         await client.replyMessage({
           replyToken,
           messages: [{
             type: 'text',
-            text: `あなたの健康習慣：\n${habits.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\n実施した活動を選択してください。`,
+            text: `あなたの健康習慣：\n${habits.map((h, i) => `${i + 1}. ${h}`).join('\n')}${todayLogText}\n\n実施した活動を選択してください。`,
             quickReply: {
               items: quickReplyItems,
             },
@@ -137,7 +168,52 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         return;
       }
 
-      // 通常のメッセージへの応答
+      if (text === '/統計') {
+        // 7日間の統計を表示
+        const stats = await getHabitStats(user.id, 7);
+
+        if (stats.length === 0) {
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: 'まだ記録がありません。\n習慣を実施したら記録してみましょう！',
+            }],
+          });
+          return;
+        }
+
+        const statsText = stats.map((stat, i) => {
+          const lastLogged = new Date(stat.last_logged).toLocaleDateString('ja-JP', {
+            timeZone: 'Asia/Tokyo',
+            month: 'short',
+            day: 'numeric'
+          });
+          return `${i + 1}. ${stat.habit_name}: ${stat.count}回\n   最終: ${lastLogged}`;
+        }).join('\n');
+
+        await client.replyMessage({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: `【過去7日間の統計】\n${statsText}`,
+          }],
+        });
+        return;
+      }
+
+      // 通常のメッセージへの応答（習慣を記録）
+      // 習慣名として認識されるか確認
+      const isHabit = habits.includes(text);
+
+      if (isHabit) {
+        // 習慣をDBに記録
+        await logHabit(user.id, text);
+      }
+
+      // 今日の記録を取得
+      const todayLogs = await getTodayHabitLogs(user.id);
+
       const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
         type: 'action',
         action: {
@@ -161,16 +237,35 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         type: 'action',
         action: {
           type: 'message',
-          label: '習慣を変更',
-          text: '/設定 ',
+          label: '統計を見る',
+          text: '/統計',
         },
       });
+
+      // 現在の日時を取得
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'short'
+      });
+      const timeStr = now.toLocaleTimeString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const todayCount = todayLogs.length;
+      const message = isHabit
+        ? `✓ 「${text}」を記録しました！\n\n📅 ${dateStr} ${timeStr}\n🎯 今日の記録: ${todayCount}件\n\n次の活動を選択してください。`
+        : `「${text}」を受信しました。\n\n📅 ${dateStr} ${timeStr}\n\n習慣を選択してください。`;
 
       await client.replyMessage({
         replyToken,
         messages: [{
           type: 'text',
-          text: `「${text}」を記録しました！\n\n次の活動を選択してください。`,
+          text: message,
           quickReply: {
             items: quickReplyItems,
           },

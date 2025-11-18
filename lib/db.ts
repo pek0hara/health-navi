@@ -43,6 +43,22 @@ export async function initDatabase() {
       ON health_habits(user_id);
     `);
 
+    // 習慣達成記録テーブル
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS habit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        habit_name TEXT NOT NULL,
+        logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        note TEXT
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_habit_logs_user_id
+      ON habit_logs(user_id, logged_at DESC);
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -121,4 +137,43 @@ export async function setUserHabits(userId: string, habits: string[]) {
   } finally {
     client.release();
   }
+}
+
+// 習慣達成記録関連の操作
+export async function logHabit(userId: string, habitName: string, note?: string) {
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const result = await pool.query(
+    `INSERT INTO habit_logs (id, user_id, habit_name, note)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [logId, userId, habitName, note || null]
+  );
+  return result.rows[0];
+}
+
+export async function getTodayHabitLogs(userId: string) {
+  const result = await pool.query(
+    `SELECT * FROM habit_logs
+     WHERE user_id = $1
+     AND DATE(logged_at AT TIME ZONE 'Asia/Tokyo') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')
+     ORDER BY logged_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getHabitStats(userId: string, days: number = 7) {
+  const result = await pool.query(
+    `SELECT
+       habit_name,
+       COUNT(*) as count,
+       MAX(logged_at) as last_logged
+     FROM habit_logs
+     WHERE user_id = $1
+     AND logged_at >= CURRENT_TIMESTAMP - INTERVAL '${days} days'
+     GROUP BY habit_name
+     ORDER BY count DESC`,
+    [userId]
+  );
+  return result.rows;
 }
