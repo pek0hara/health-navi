@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as line from '@line/bot-sdk';
-import { prisma } from '@/lib/prisma';
 
 // LINE Messaging APIの設定
 const config: line.ClientConfig = {
@@ -10,65 +9,11 @@ const config: line.ClientConfig = {
 
 const client = new line.messagingApi.MessagingApiClient(config);
 
-// ユーザーを取得または作成
-async function getOrCreateUser(lineUserId: string, profile?: any) {
-  let user = await prisma.user.findUnique({
-    where: { lineId: lineUserId },
-    include: { healthHabits: { orderBy: { order: 'asc' } } },
-  });
+// 一時的なメモリストレージ (Prismaが利用可能になるまで)
+const userHabitsMemory: Map<string, string[]> = new Map();
 
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        lineId: lineUserId,
-        displayName: profile?.displayName,
-        pictureUrl: profile?.pictureUrl,
-        statusMessage: profile?.statusMessage,
-      },
-      include: { healthHabits: { orderBy: { order: 'asc' } } },
-    });
-  }
-
-  return user;
-}
-
-// 健康習慣を設定
-async function setHealthHabits(userId: string, habits: string[]) {
-  // 最大3つまで
-  const habitsToSet = habits.slice(0, 3);
-
-  // 既存の習慣を削除
-  await prisma.healthHabit.deleteMany({
-    where: { userId },
-  });
-
-  // 新しい習慣を作成
-  await prisma.healthHabit.createMany({
-    data: habitsToSet.map((name, index) => ({
-      userId,
-      name,
-      order: index + 1,
-    })),
-  });
-}
-
-// ユーザーの健康習慣を取得
-type HealthHabit = {
-  id: string;
-  userId: string;
-  name: string;
-  order: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-async function getUserHabits(userId: string): Promise<HealthHabit[]> {
-  return await prisma.healthHabit.findMany({
-    where: { userId, isActive: true },
-    orderBy: { order: 'asc' },
-  });
-}
+// デフォルトの健康習慣
+const DEFAULT_HABITS = ['散歩', '筋トレ', '瞑想'];
 
 // Webhookイベントの処理
 async function handleEvent(event: line.WebhookEvent): Promise<void> {
@@ -87,14 +32,24 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
 
     console.log('Text message received:', text);
 
-    // ユーザーを取得または作成
-    const user = await getOrCreateUser(lineUserId);
-    const habits = await getUserHabits(user.id);
+    // ユーザーの習慣を取得（メモリから）
+    let habits = userHabitsMemory.get(lineUserId) || DEFAULT_HABITS;
 
     // コマンド処理
     if (text.startsWith('/設定 ')) {
       // 習慣設定コマンド: /設定 散歩,筋トレ,瞑想
-      const habitNames = text.replace('/設定 ', '').split(',').map(h => h.trim());
+      const habitNames = text.replace('/設定 ', '').split(',').map(h => h.trim()).filter(h => h);
+
+      if (habitNames.length === 0) {
+        await client.replyMessage({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: '習慣を入力してください。\n\n例: /設定 散歩,筋トレ,瞑想',
+          }],
+        });
+        return;
+      }
 
       if (habitNames.length > 3) {
         await client.replyMessage({
@@ -107,38 +62,16 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         return;
       }
 
-      await setHealthHabits(user.id, habitNames);
+      // メモリに保存
+      userHabitsMemory.set(lineUserId, habitNames);
+      habits = habitNames;
 
-      await client.replyMessage({
-        replyToken,
-        messages: [{
-          type: 'text',
-          text: `健康習慣を設定しました：\n${habitNames.map((h, i) => `${i + 1}. ${h}`).join('\n')}`,
-        }],
-      });
-      return;
-    }
-
-    if (text === '/習慣' || text === '/確認') {
-      // 現在の習慣を確認
-      if (habits.length === 0) {
-        await client.replyMessage({
-          replyToken,
-          messages: [{
-            type: 'text',
-            text: '健康習慣が設定されていません。\n\n/設定 散歩,筋トレ,瞑想\nのように設定してください。',
-          }],
-        });
-        return;
-      }
-
-      // 習慣をQuick Replyで表示
       const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
         type: 'action',
         action: {
           type: 'message',
-          label: habit.name,
-          text: habit.name,
+          label: habit,
+          text: habit,
         },
       }));
 
@@ -146,7 +79,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         replyToken,
         messages: [{
           type: 'text',
-          text: `あなたの健康習慣：\n${habits.map((h, i) => `${i + 1}. ${h.name}`).join('\n')}\n\n実施した活動を選択してください。`,
+          text: `健康習慣を設定しました：\n${habitNames.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\n実施した活動を選択してください。`,
           quickReply: {
             items: quickReplyItems,
           },
@@ -155,14 +88,14 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       return;
     }
 
-    // 習慣が設定されている場合、選択肢として表示
-    if (habits.length > 0) {
+    if (text === '/習慣' || text === '/確認') {
+      // 現在の習慣を確認
       const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
         type: 'action',
         action: {
           type: 'message',
-          label: habit.name,
-          text: habit.name,
+          label: habit,
+          text: habit,
         },
       }));
 
@@ -180,50 +113,54 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         replyToken,
         messages: [{
           type: 'text',
-          text: `「${text}」を記録しました！\n\n次の活動を選択してください。`,
+          text: `あなたの健康習慣：\n${habits.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\n実施した活動を選択してください。`,
           quickReply: {
             items: quickReplyItems,
           },
         }],
       });
-    } else {
-      // 習慣が未設定の場合、デフォルトの選択肢を表示
-      await client.replyMessage({
-        replyToken,
-        messages: [{
-          type: 'text',
-          text: '健康習慣を設定してください。\n\n例: /設定 散歩,筋トレ,瞑想',
-          quickReply: {
-            items: [
-              {
-                type: 'action',
-                action: {
-                  type: 'message',
-                  label: '散歩・筋トレ・瞑想',
-                  text: '/設定 散歩,筋トレ,瞑想',
-                },
-              },
-              {
-                type: 'action',
-                action: {
-                  type: 'message',
-                  label: 'ヨガ・ランニング・水泳',
-                  text: '/設定 ヨガ,ランニング,水泳',
-                },
-              },
-              {
-                type: 'action',
-                action: {
-                  type: 'message',
-                  label: '読書・瞑想・ストレッチ',
-                  text: '/設定 読書,瞑想,ストレッチ',
-                },
-              },
-            ],
-          },
-        }],
-      });
+      return;
     }
+
+    // 通常のメッセージへの応答
+    const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
+      type: 'action',
+      action: {
+        type: 'message',
+        label: habit,
+        text: habit,
+      },
+    }));
+
+    // 設定コマンドも追加
+    quickReplyItems.push({
+      type: 'action',
+      action: {
+        type: 'message',
+        label: '習慣を確認',
+        text: '/習慣',
+      },
+    });
+
+    quickReplyItems.push({
+      type: 'action',
+      action: {
+        type: 'message',
+        label: '習慣を変更',
+        text: '/設定 ',
+      },
+    });
+
+    await client.replyMessage({
+      replyToken,
+      messages: [{
+        type: 'text',
+        text: `「${text}」を記録しました！\n\n次の活動を選択してください。`,
+        quickReply: {
+          items: quickReplyItems,
+        },
+      }],
+    });
   }
 
   // フォローイベントの場合
@@ -237,42 +174,44 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       return;
     }
 
-    // プロフィール情報を取得してユーザー作成
-    try {
-      const profile = await client.getProfile(lineUserId);
-      await getOrCreateUser(lineUserId, profile);
-    } catch (err) {
-      console.error('Error getting profile:', err);
-      await getOrCreateUser(lineUserId);
-    }
+    // デフォルトの習慣を設定
+    userHabitsMemory.set(lineUserId, DEFAULT_HABITS);
 
     const welcomeMessage: line.TextMessage = {
       type: 'text',
-      text: 'フォローありがとうございます！健康ナビへようこそ。\n\nまず、あなたの健康習慣を設定しましょう。\n\n例: /設定 散歩,筋トレ,瞑想',
+      text: 'フォローありがとうございます！健康ナビへようこそ。\n\nデフォルトの健康習慣を設定しました：\n1. 散歩\n2. 筋トレ\n3. 瞑想\n\n変更する場合は「/設定 習慣1,習慣2,習慣3」と入力してください。',
       quickReply: {
         items: [
           {
             type: 'action',
             action: {
               type: 'message',
-              label: '散歩・筋トレ・瞑想',
-              text: '/設定 散歩,筋トレ,瞑想',
+              label: '散歩',
+              text: '散歩',
             },
           },
           {
             type: 'action',
             action: {
               type: 'message',
-              label: 'ヨガ・ランニング・水泳',
-              text: '/設定 ヨガ,ランニング,水泳',
+              label: '筋トレ',
+              text: '筋トレ',
             },
           },
           {
             type: 'action',
             action: {
               type: 'message',
-              label: '読書・瞑想・ストレッチ',
-              text: '/設定 読書,瞑想,ストレッチ',
+              label: '瞑想',
+              text: '瞑想',
+            },
+          },
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '習慣を変更',
+              text: '/設定 ',
             },
           },
         ],
@@ -347,6 +286,6 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     status: 'ok',
-    message: 'LINE Webhook endpoint is running'
+    message: 'LINE Webhook endpoint is running (temporary version without database)'
   });
 }
