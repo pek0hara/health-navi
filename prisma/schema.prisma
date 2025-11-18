@@ -23,6 +23,7 @@ model User {
   // リレーション
   messages  Message[]
   healthRecords HealthRecord[]
+  healthHabits  HealthHabit[]
 }
 
 // メッセージ履歴
@@ -60,4 +61,19 @@ model HealthRecord {
   updatedAt DateTime @updatedAt
 
   @@index([userId, date])
+}
+
+// 健康習慣（ユーザーごとに最大3つ）
+model HealthHabit {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   // 習慣名（散歩、筋トレ、瞑想など）
+  order     Int      // 表示順序（1-3）
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, order])
+  @@index([userId])
 }
