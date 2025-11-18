@@ -97,7 +97,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
           type: 'action',
           action: {
             type: 'message',
-            label: `${datePrefix} ${habit}`,
+            label: habit,
             text: `${datePrefix} ${habit}`,
           },
         }));
@@ -127,7 +127,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
           type: 'action',
           action: {
             type: 'message',
-            label: `${datePrefix} ${habit}`,
+            label: habit,
             text: `${datePrefix} ${habit}`,
           },
         }));
@@ -234,7 +234,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         type: 'action',
         action: {
           type: 'message',
-          label: `${datePrefix} ${habit}`,
+          label: habit,
           text: `${datePrefix} ${habit}`,
         },
       }));
@@ -338,7 +338,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
               type: 'action',
               action: {
                 type: 'message',
-                label: `${datePrefix} 散歩`,
+                label: '散歩',
                 text: `${datePrefix} 散歩`,
               },
             },
@@ -346,7 +346,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
               type: 'action',
               action: {
                 type: 'message',
-                label: `${datePrefix} 筋トレ`,
+                label: '筋トレ',
                 text: `${datePrefix} 筋トレ`,
               },
             },
@@ -354,7 +354,7 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
               type: 'action',
               action: {
                 type: 'message',
-                label: `${datePrefix} 瞑想`,
+                label: '瞑想',
                 text: `${datePrefix} 瞑想`,
               },
             },
