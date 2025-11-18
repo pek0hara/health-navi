@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+}
+
+// LINE ユーザーモデル
+model User {
+  id        String   @id @default(cuid())
+  lineId    String   @unique // LINE User ID
+  displayName String?
+  pictureUrl  String?
+  statusMessage String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // リレーション
+  messages  Message[]
+  healthRecords HealthRecord[]
+}
+
+// メッセージ履歴
+model Message {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // text, image, etc.
+  content   String   // メッセージ内容
+  direction String   // incoming / outgoing
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// 健康記録
+model HealthRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+
+  // 健康データ
+  weight    Float?
+  bloodPressureSystolic  Int?
+  bloodPressureDiastolic Int?
+  bloodSugar Float?
+  steps     Int?
+  sleepHours Float?
+
+  // メモ
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+}
