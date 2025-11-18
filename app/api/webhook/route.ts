@@ -89,9 +89,10 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         // データベースに保存
         await setUserHabits(user.id, habitNames);
 
-        // 現在の日付を取得（MM/DD形式）
-        const currentDate = new Date();
-        const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+        // 現在の日付を取得（MM/DD形式、日本時間）
+        const now = new Date();
+        const jstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        const datePrefix = `${jstDate.getMonth() + 1}/${jstDate.getDate()}`;
 
         const quickReplyItems: line.QuickReplyItem[] = habitNames.map((habit) => ({
           type: 'action',
@@ -119,9 +120,10 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
         // 現在の習慣を確認
         const todayLogs = await getTodayHabitLogs(user.id);
 
-        // 現在の日付を取得（MM/DD形式）
-        const currentDate = new Date();
-        const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+        // 現在の日付を取得（MM/DD形式、日本時間）
+        const now = new Date();
+        const jstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        const datePrefix = `${jstDate.getMonth() + 1}/${jstDate.getDate()}`;
 
         const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
           type: 'action',
@@ -226,9 +228,10 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       // 今日の記録を取得
       const todayLogs = await getTodayHabitLogs(user.id);
 
-      // 現在の日付を取得（MM/DD形式）
-      const currentDate = new Date();
-      const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+      // 現在の日付を取得（MM/DD形式、日本時間）
+      const currentTime = new Date();
+      const jstDate = new Date(currentTime.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      const datePrefix = `${jstDate.getMonth() + 1}/${jstDate.getDate()}`;
 
       const quickReplyItems: line.QuickReplyItem[] = habits.map((habit) => ({
         type: 'action',
@@ -325,9 +328,10 @@ async function handleEvent(event: line.WebhookEvent): Promise<void> {
       // デフォルトの習慣を設定
       await setUserHabits(user.id, DEFAULT_HABITS);
 
-      // 現在の日付を取得（MM/DD形式）
-      const currentDate = new Date();
-      const datePrefix = `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+      // 現在の日付を取得（MM/DD形式、日本時間）
+      const now = new Date();
+      const jstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      const datePrefix = `${jstDate.getMonth() + 1}/${jstDate.getDate()}`;
 
       const welcomeMessage: line.TextMessage = {
         type: 'text',
